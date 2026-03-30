@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Moteur de recherche - Interface</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  </head>
+  <body class="bg-light">
+    <div class="container py-5">
+      <h1 class="mb-4">Moteur de recherche</h1>
+
+      <div class="input-group mb-3">
+        <input id="q" type="text" class="form-control" placeholder="Entrez une requête..." aria-label="Requête">
+        <button id="searchBtn" class="btn btn-primary">Rechercher</button>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Filtres :</label>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="checkbox" id="ftxt" checked>
+          <label class="form-check-label" for="ftxt">TXT</label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="checkbox" id="fhtml" checked>
+          <label class="form-check-label" for="fhtml">HTML</label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="checkbox" id="fpdf" checked>
+          <label class="form-check-label" for="fpdf">PDF</label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="checkbox" id="fxlsx" checked>
+          <label class="form-check-label" for="fxlsx">XLSX</label>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="useRegex">
+          <label class="form-check-label" for="useRegex">Activer le mode regex</label>
+        </div>
+        <div class="form-text">Requêtes avancées: utilisez <code>et</code>/<code>ou</code> ou cochez le mode regex.</div>
+      </div>
+
+      <div id="results" class="card">
+        <div class="card-body">
+          <div id="noResults" class="text-muted">Aucun résultat</div>
+          <table id="resultsTable" class="table table-striped" style="display:none">
+            <thead>
+              <tr>
+                <th>Fichier</th>
+                <th>Type</th>
+                <th>Emplacement</th>
+                <th>Extrait</th>
+              </tr>
+            </thead>
+            <tbody id="resultsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const btn = document.getElementById('searchBtn')
+      const qin = document.getElementById('q')
+      const regexToggle = document.getElementById('useRegex')
+
+      function escapeRegExp(text) {
+        return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      }
+
+      function extractTerms(q) {
+        return q
+          .split(/\b(?:and|or|et|ou)\b|[()]/i)
+          .map((term) => term.trim())
+          .filter(Boolean)
+      }
+
+      function highlight(text, q, useRegex) {
+        if (useRegex) return text
+
+        let result = text
+        for (const term of extractTerms(q)) {
+          const re = new RegExp(escapeRegExp(term), 'ig')
+          result = result.replace(re, (m) => `<mark>${m}</mark>`)
+        }
+        return result
+      }
+
+      async function doSearch() {
+        const q = qin.value.trim()
+        if (!q) return
+        const useRegex = regexToggle.checked
+
+        document.getElementById('noResults').textContent = 'Recherche en cours...'
+        document.getElementById('resultsTable').style.display = 'none'
+        document.getElementById('resultsBody').innerHTML = ''
+
+        const types = []
+        if (document.getElementById('ftxt').checked) types.push('txt')
+        if (document.getElementById('fhtml').checked) types.push('html')
+        if (document.getElementById('fpdf').checked) types.push('pdf')
+        if (document.getElementById('fxlsx').checked) types.push('xlsx')
+        const params = new URLSearchParams({ q })
+        if (types.length) params.set('types', types.join(','))
+        if (useRegex) params.set('regex', '1')
+
+        try {
+          const resp = await fetch(`/api/search?${params.toString()}`)
+          const data = await resp.json()
+          if (!resp.ok) throw new Error(data.error || 'Server error')
+          const rows = data.results || []
+          if (rows.length === 0) {
+            document.getElementById('noResults').textContent = 'Aucun résultat'
+            return
+          }
+          document.getElementById('noResults').textContent = ''
+          const tbody = document.getElementById('resultsBody')
+          for (const r of rows) {
+            const tr = document.createElement('tr')
+            const fileTd = document.createElement('td')
+            fileTd.textContent = r.file
+            const typeTd = document.createElement('td')
+            typeTd.textContent = r.type
+            const locTd = document.createElement('td')
+            locTd.textContent = r.location
+            const snippetTd = document.createElement('td')
+            snippetTd.innerHTML = highlight(escapeHtml(String(r.snippet)), q, useRegex)
+            tr.appendChild(fileTd)
+            tr.appendChild(typeTd)
+            tr.appendChild(locTd)
+            tr.appendChild(snippetTd)
+            tbody.appendChild(tr)
+          }
+          document.getElementById('resultsTable').style.display = ''
+        } catch (e) {
+          document.getElementById('noResults').textContent = 'Erreur lors de la requête: ' + e
+        }
+      }
+
+      // simple escape to avoid HTML injection
+      function escapeHtml(unsafe) {
+        return unsafe.replace(/[&<"'>]/g, function(m) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#039;"})[m] })
+      }
+
+      btn.addEventListener('click', doSearch)
+      qin.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch() })
+    </script>
+  </body>
+</html>

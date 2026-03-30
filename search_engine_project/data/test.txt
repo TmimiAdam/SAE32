@@ -1,0 +1,4 @@
+Bonjour, ceci est un fichier de test.
+Le moteur de recherche doit retrouver ce texte.
+Python est génial pour le traitement de texte.
+Voici une ligne additionnelle contenant le mot clé: moteur.
